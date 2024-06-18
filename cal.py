@@ -54,24 +54,45 @@ def calculate_hops_utilization(alpha_acids, hop_weight_g, boil_time, wort_volume
     ibu = (alpha_acids * hop_weight_g * utilization_factor * 1000) / wort_volume_liters
     return ibu
 
-st.title('Brewing Calculators')
-
-# Custom CSS to add a background image
+# Custom CSS to add a background image and style buttons
 st.markdown(
     """
     <style>
     .stApp {
         background-image: url('https://images.unsplash.com/photo-1457382713369-161d1d986f54?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D');
         background-size: cover;
+        color: white;
+    }
+    .sidebar-content {
+        background-color: #000;
+    }
+    .sidebar .sidebar-content {
+        background-color: #000;
+        color: white;
+    }
+    .stButton>button {
+        background-color: #444;
+        color: white;
+        border: 1px solid #888;
+        border-radius: 5px;
+        padding: 10px 20px;
+        margin: 5px;
+    }
+    .stButton>button:hover {
+        background-color: #888;
+        color: black;
+        border: 1px solid #444;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
 
+st.title('Brewing Calculators')
+
 # About Section
 st.sidebar.title('About Me')
-st.sidebar.image("https://media.licdn.com/dms/image/C4D03AQFHBrqSoctkhg/profile-displayphoto-shrink_800_800/0/1657162810861?e=1693440000&v=beta&t=usR9Ti1AWTjv9O7GVnH9Q_eL8vZhM7ydkS1X9qlmLl8")  # Replace with your own image URL
+st.sidebar.image("https://media.licdn.com/dms/image/C5603AQGcCco8w8XjOA/profile-displayphoto-shrink_400_400/0/1600255517459?e=1724284800&v=beta&t=ssZTKMh1D9GJ_tvB6ED_cAdk3cuKQ1eRCxAais2s-WE")  # Your provided image URL
 st.sidebar.markdown("""
 ## Ankur Napa
 
@@ -80,8 +101,29 @@ I'm Ankur Napa, a professional with extensive experience in the brewing industry
 [LinkedIn Profile](https://www.linkedin.com/in/ankur-napa/)
 """)
 
-# Create tiles for different calculators
-tile = st.selectbox("Choose a calculator:", ["Brewhouse Efficiency", "Yeast Pitching Rate", "Extract Yield and Efficiency", "Grain Weight", "Hops Utilization"])
+# Create buttons for different calculators
+st.write("## Choose a Calculator")
+col1, col2, col3, col4, col5 = st.columns(5)
+
+with col1:
+    if st.button('Brewhouse Efficiency'):
+        tile = 'Brewhouse Efficiency'
+with col2:
+    if st.button('Yeast Pitching Rate'):
+        tile = 'Yeast Pitching Rate'
+with col3:
+    if st.button('Extract Yield and Efficiency'):
+        tile = 'Extract Yield and Efficiency'
+with col4:
+    if st.button('Grain Weight'):
+        tile = 'Grain Weight'
+with col5:
+    if st.button('Hops Utilization'):
+        tile = 'Hops Utilization'
+
+# Initialize tile if not set
+if 'tile' not in locals():
+    tile = 'Brewhouse Efficiency'
 
 if tile == 'Brewhouse Efficiency':
     st.header('Brewhouse Efficiency Calculator (Metric)')
