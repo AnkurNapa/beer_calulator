@@ -1,58 +1,110 @@
+import math
 import streamlit as st
 
-# Function to calculate brewhouse efficiency
-def calculate_brewhouse_efficiency(grain_weight_kg, wort_volume_liters, original_gravity):
-    max_potential_gravity = 1.080  # Example value; you may change this based on your grain bill
-    max_potential_points = (max_potential_gravity - 1) * 1000
+# Placeholder functions for the missing acan module
+def sg_to_plato(sg):
+    return (sg - 1) * 1000 / 4  # Simplified conversion
 
-    actual_points = (original_gravity - 1) * 1000
-    potential_yield = grain_weight_kg * max_potential_points * 1000  # converting kg to grams
+def plato_to_sg(plato):
+    return 1 + (plato * 4) / 1000  # Simplified conversion
 
-    efficiency = (actual_points * wort_volume_liters) / potential_yield
-    return efficiency * 100  # Convert to percentage
+def brix_to_sg(brix):
+    return 1 + (brix / (258.6 - ((brix / 258.2) * 227.1)))  # Simplified conversion
 
-# Function to calculate yeast pitching rate
-def calculate_yeast_pitching_rate(volume_liters, original_gravity, pitching_rate):
-    degrees_plato = (original_gravity - 1) * 1000 / 4
-    yeast_cells_needed = volume_liters * degrees_plato * pitching_rate
-    yeast_cells_needed_billions = yeast_cells_needed / 1e9
-    return yeast_cells_needed_billions
+def sg_to_gu(sg):
+    return (sg - 1) * 1000  # Gravity units
 
-# Function to calculate extract yield and extract efficiency using SG method
-def calculate_extract_yield_efficiency_SG(grain_weight_kg, wort_volume_liters, original_gravity, extract_per_kg):
-    # Convert hectoliters to liters
-    wort_volume_liters = wort_volume_liters * 100
-    
-    # Calculate potential available extract
-    potential_available_extract = grain_weight_kg * extract_per_kg
-    
-    # Actual extract achieved
-    actual_extract_achieved = wort_volume_liters * (original_gravity - 1) * 1000
-    
-    # Extract yield
-    extract_yield = actual_extract_achieved / grain_weight_kg
-    
-    # Extract efficiency
-    extract_efficiency = (actual_extract_achieved / potential_available_extract) * 100
-    
-    return extract_yield, extract_efficiency
+def litre_to_gallon(liters):
+    return liters * 0.264172  # Convert liters to gallons
 
-# Function to calculate the grain weight needed for a brew
-def calculate_grain_weight(wort_volume_liters, target_original_gravity, extract_efficiency):
-    # Calculate the total extract needed in litre degrees
-    total_extract_needed = wort_volume_liters * (target_original_gravity - 1) * 1000
-    
-    # Calculate the grain weight required
-    grain_weight = total_extract_needed / (extract_efficiency / 100 * 300)
-    
-    return grain_weight
+def gram_to_pound(grams):
+    return grams * 0.00220462  # Convert grams to pounds
 
-# Function to calculate hops utilization
-def calculate_hops_utilization(alpha_acids, hop_weight_g, boil_time, wort_volume_liters):
-    # Utilization factor based on boil time (simplified model)
-    utilization_factor = 0.1 + (boil_time / 60) * 0.15
-    ibu = (alpha_acids * hop_weight_g * utilization_factor * 1000) / wort_volume_liters
-    return ibu
+def gram_to_ounce(grams):
+    return grams * 0.035274  # Convert grams to ounces
+
+# Wort class
+class Wort:
+    def __init__(self, original, final, unit='sg', grains=None, volume=None):
+        if unit == 'sg':
+            self.og = original
+            self.fg = final
+            self.oe = sg_to_plato(self.og)
+            self.ae = sg_to_plato(self.fg)
+        elif unit == 'plato':
+            self.oe = original
+            self.ae = final
+            self.og = plato_to_sg(self.oe)
+            self.fg = plato_to_sg(self.ae)
+        elif unit == 'brix':
+            self.og = brix_to_sg(original)
+            self.fg = brix_to_sg(final)
+            self.oe = sg_to_plato(self.og)
+            self.ae = sg_to_plato(self.fg)
+        else:
+            raise ValueError('unit must be sg, plato, or brix')
+
+        if grains:
+            if volume:
+                self.volume = float(volume)
+                total_weight = sum(grain[0] for grain in grains)
+                gallons = litre_to_gallon(self.volume)
+                self.points_pound_gallon = (gallons * sg_to_gu(self.og) / gram_to_pound(total_weight))
+                self.mash_efficiency = sg_to_gu(self.og) / sum(g[1] * gram_to_pound(g[0]) / gallons for g in grains) * 100
+            else:
+                raise ValueError('wort\'s volume must be informed')
+        else:
+            self.points_pound_gallon = self.volume = -1.0
+            self.brewhouse_efficiency = self.mash_efficiency = self.volume
+
+        self.real_extract = (0.1808 * self.oe) + (0.8192 * self.ae)
+        self.apparent_attenuation = (self.og - self.fg) / (self.og - 1) * 100
+        self.real_attenuation = ((self.oe - self.real_extract) / (self.oe - 1) * 100)
+        self.alcohol_by_volume = ((self.og - self.fg) / 0.75) * 100
+        self.alcohol_by_weight = (((0.79 * (self.alcohol_by_volume / 100)) / self.fg) * 100)
+        self.calories = (((6.9 * self.alcohol_by_weight) + (4 * (self.real_extract - 0.1))) * self.fg * 3.55)
+
+    def __str__(self):
+        return 'Original gravity.....[SG]: {0:7.3f}\n'\
+            'Final gravity........[SG]: {1:7.3f}\n'\
+            'Original extract..[Plato]: {2:7.3f}\n'\
+            'Apparent extract..[Plato]: {3:7.3f}\n'\
+            'Real extract......[Plato]: {4:7.3f}\n'\
+            'Volume................[L]: {5:7.3f}\n'\
+            'Points/Pound/Gallon.[PPG]: {6:7.3f}\n'\
+            'Mash efficiency.......[%]: {7:7.3f}\n'\
+            'Apparent attenuation..[%]: {8:7.3f}\n'\
+            'Real attenuation......[%]: {9:7.3f}\n'\
+            'Alcohol by weight.....[%]: {10:7.3f}\n'\
+            'Alcohol by volume.....[%]: {11:7.3f}\n'\
+            'Calories in 355 mL..[Cal]: {12:7.3f}\n'.format(self.og, self.fg,
+            self.oe, self.ae, self.real_extract, self.volume,
+            self.points_pound_gallon, self.mash_efficiency,
+            self.apparent_attenuation, self.real_attenuation,
+            self.alcohol_by_weight, self.alcohol_by_volume, self.calories)
+
+# Hops class
+class Hops:
+    def __init__(self, w, a, v, sg, t):
+        self.hops_weight = w
+        self.hops_alpha = a
+        self.wort_volume = v
+        self.wort_sg = sg
+        self.hops_boil_time = t
+        self.wort_bitterness = self.tinseth(self.hops_weight, self.hops_alpha, self.wort_volume, self.wort_sg, self.hops_boil_time)
+
+    def tinseth(self, w, a, v, sg, t):
+        return ((1.65 * 0.000125 ** (sg - 1)) * ((1 - math.e ** (-0.04 * t)) / 4.15) * ((a / 100) * w * 1000 / v))
+
+    def __str__(self):
+        return 'Hops weight.......[g]: {0:6.2f}\n'\
+            'Hops alpha acids..[%]: {1:6.2f}\n'\
+            'Wort volume.......[L]: {2:6.2f}\n'\
+            'Wort SG...........[L]: {3:7.3f}\n'\
+            'Hops boil time....[m]: {4:3.0f}\n'\
+            'Wort bitterness.[IBU]: {5:7.3f}'.format(self.hops_weight,
+            self.hops_alpha, self.wort_volume, self.wort_sg,
+            self.hops_boil_time, self.wort_bitterness)
 
 # Custom CSS to add a background image and style buttons
 st.markdown(
@@ -88,11 +140,11 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title('Brewing Calculators')
+st.title('🍺 Brewing Calculators')
 
 # About Section
 st.sidebar.title('About Me')
-st.sidebar.image("https://media.licdn.com/dms/image/C5603AQGcCco8w8XjOA/profile-displayphoto-shrink_400_400/0/1600255517459?e=1724284800&v=beta&t=ssZTKMh1D9GJ_tvB6ED_cAdk3cuKQ1eRCxAais2s-WE")  # Your provided image URL
+st.sidebar.image("https://media.licdn.com/dms/image/C5603AQGcCco8w8XjOA/profile-displayphoto-shrink_400_400/0/1600255517459?e=1724284800&v=beta&t=ssZTKMh1D9GJ_tvB6ED_cAdk3cuKQ1eRCxAais2s-WE", use_column_width=True, caption="Ankur Napa")  # Your provided image URL
 st.sidebar.markdown("""
 ## Ankur Napa
 
@@ -106,19 +158,19 @@ st.write("## Choose a Calculator")
 col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
-    if st.button('Brewhouse Efficiency'):
+    if st.button('Brewhouse Efficiency 🔧'):
         tile = 'Brewhouse Efficiency'
 with col2:
-    if st.button('Yeast Pitching Rate'):
+    if st.button('Yeast Pitching Rate 🍶'):
         tile = 'Yeast Pitching Rate'
 with col3:
-    if st.button('Extract Yield and Efficiency'):
+    if st.button('Extract Yield and Efficiency 🧮'):
         tile = 'Extract Yield and Efficiency'
 with col4:
-    if st.button('Grain Weight'):
+    if st.button('Grain Weight ⚖️'):
         tile = 'Grain Weight'
 with col5:
-    if st.button('Hops Utilization'):
+    if st.button('Hops Utilization 🌿'):
         tile = 'Hops Utilization'
 
 # Initialize tile if not set
@@ -126,7 +178,7 @@ if 'tile' not in locals():
     tile = 'Brewhouse Efficiency'
 
 if tile == 'Brewhouse Efficiency':
-    st.header('Brewhouse Efficiency Calculator (Metric)')
+    st.header('Brewhouse Efficiency Calculator (Metric) 🔧')
     
     # Input fields for brewhouse efficiency
     grain_weight_kg = st.number_input('Enter grain weight (in kilograms)', min_value=0.0, format="%.2f")
@@ -135,13 +187,14 @@ if tile == 'Brewhouse Efficiency':
 
     if st.button('Calculate Brewhouse Efficiency'):
         if grain_weight_kg > 0 and wort_volume_liters > 0 and original_gravity > 1.000:
-            efficiency = calculate_brewhouse_efficiency(grain_weight_kg, wort_volume_liters, original_gravity)
+            wort = Wort(original_gravity, 1.000, unit='sg', grains=[(grain_weight_kg, 36)], volume=wort_volume_liters)
+            efficiency = wort.mash_efficiency
             st.success(f'Brewhouse Efficiency: {efficiency:.2f}%')
         else:
             st.error('Please enter valid input values')
 
 elif tile == 'Yeast Pitching Rate':
-    st.header('Yeast Pitching Rate Calculator')
+    st.header('Yeast Pitching Rate Calculator 🍶')
     
     # Input fields for yeast pitching rate
     volume_liters = st.number_input('Enter wort volume (in liters)', min_value=0.0, format="%.2f")
@@ -150,13 +203,13 @@ elif tile == 'Yeast Pitching Rate':
 
     if st.button('Calculate Yeast Pitching Rate'):
         if volume_liters > 0 and original_gravity > 1.000 and pitching_rate > 0:
-            yeast_cells_needed = calculate_yeast_pitching_rate(volume_liters, original_gravity, pitching_rate)
+            yeast_cells_needed = (volume_liters * ((original_gravity - 1) * 1000 / 4) * pitching_rate) / 1e9
             st.success(f'Yeast Cells Needed: {yeast_cells_needed:.2f} billion cells')
         else:
             st.error('Please enter valid input values')
 
 elif tile == 'Extract Yield and Efficiency':
-    st.header('Extract Yield and Efficiency Calculator (SG Method)')
+    st.header('Extract Yield and Efficiency Calculator (SG Method) 🧮')
     
     # Input fields for extract yield and efficiency
     grain_weight_kg = st.number_input('Enter grain weight (in kilograms)', min_value=0.0, format="%.2f")
@@ -166,14 +219,17 @@ elif tile == 'Extract Yield and Efficiency':
 
     if st.button('Calculate Extract Yield and Efficiency'):
         if grain_weight_kg > 0 and wort_volume_hl > 0 and original_gravity > 1.000:
-            extract_yield, extract_efficiency = calculate_extract_yield_efficiency_SG(grain_weight_kg, wort_volume_hl, original_gravity, extract_per_kg)
+            potential_available_extract = grain_weight_kg * extract_per_kg
+            actual_extract_achieved = wort_volume_hl * 100 * (original_gravity - 1) * 1000
+            extract_yield = actual_extract_achieved / grain_weight_kg
+            extract_efficiency = (actual_extract_achieved / potential_available_extract) * 100
             st.success(f'Extract Yield: {extract_yield:.2f} litre degrees per kg')
             st.success(f'Extract Efficiency: {extract_efficiency:.2f}%')
         else:
             st.error('Please enter valid input values')
 
 elif tile == 'Grain Weight':
-    st.header('Grain Weight Calculator')
+    st.header('Grain Weight Calculator ⚖️')
     
     # Input fields for grain weight calculation
     wort_volume_liters = st.number_input('Enter wort volume (in liters)', min_value=0.0, format="%.2f")
@@ -182,13 +238,14 @@ elif tile == 'Grain Weight':
 
     if st.button('Calculate Grain Weight'):
         if wort_volume_liters > 0 and target_original_gravity > 1.000 and extract_efficiency > 0:
-            grain_weight = calculate_grain_weight(wort_volume_liters, target_original_gravity, extract_efficiency)
+            total_extract_needed = wort_volume_liters * (target_original_gravity - 1) * 1000
+            grain_weight = total_extract_needed / (extract_efficiency / 100 * 300)
             st.success(f'Grain Weight Needed: {grain_weight:.2f} kg')
         else:
             st.error('Please enter valid input values')
 
 elif tile == 'Hops Utilization':
-    st.header('Hops Utilization Calculator')
+    st.header('Hops Utilization Calculator 🌿')
     
     # Input fields for hops utilization
     alpha_acids = st.number_input('Enter alpha acids percentage', min_value=0.0, max_value=100.0, format="%.2f")
@@ -198,7 +255,8 @@ elif tile == 'Hops Utilization':
 
     if st.button('Calculate Hops Utilization'):
         if alpha_acids > 0 and hop_weight_g > 0 and boil_time > 0 and wort_volume_liters > 0:
-            ibu = calculate_hops_utilization(alpha_acids, hop_weight_g, boil_time, wort_volume_liters)
+            hops = Hops(hop_weight_g, alpha_acids, wort_volume_liters, 1.050, boil_time)  # Assuming a default wort SG
+            ibu = hops.wort_bitterness
             st.success(f'IBU: {ibu:.2f}')
         else:
             st.error('Please enter valid input values')
